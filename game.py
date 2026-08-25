@@ -4,8 +4,8 @@ if __name__ == "__main__":
     tablero = Clobber(tamano)
     while True:
         print(tablero)
-        print("Turno del jugador A: ")
-        tablero.jugadaA(int(input("Eje x: ")), int(input("Eje y: ")))
+        print("Turno del jugador A: \nEscoja la ficha")
+        tablero.jugadaA(int(input("Fila: ")), int(input("Columna: ")), int(input("\nHaga el movimiento\nFila: ")), int(input("Columna: ")))
         print(tablero)
-        print("Turno del jugador B: ")
-        tablero.jugadaB(int(input("Eje x: ")), int(input("Eje y: ")))
+        print("Turno del jugador B: \nEscoja la ficha")
+        tablero.jugadaB(int(input("Fila: ")), int(input("Columna: ")), int(input("\nHaga el movimiento\nFila: ")), int(input("Columna: ")))

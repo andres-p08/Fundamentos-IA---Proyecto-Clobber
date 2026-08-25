@@ -96,7 +96,3 @@ class Board:
         if not  self.__check_valid_range(key[1]):
             raise LookupError(f"Column out of range: {key[1]}")
         self.__places[key[0] - 1][key[1] - 1] = value
-
-
-
-

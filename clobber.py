@@ -3,6 +3,8 @@ class Clobber(Board):
     __jugadorA:  str
     __jugadorB:  str
 
+    VALIDOS = [(1,0),(-1,0),(0,1),(0,-1)]
+
     def __init__(self, tamano, jugadorA: str = "A", jugadorB: str = "B"):
         super().__init__(tamano)
         self.__jugadorA = jugadorA
@@ -11,22 +13,30 @@ class Clobber(Board):
     def pedirTamano(self):
         self.tamano = int(input("Tamaño n del tablero: "))
 
-    def jugadaA(self, r: int, c: int) -> bool:
-        if self.valid_moveA(r, c):
-            self[r, c] = self.__jugadorA
-            return True
-        else:
+    def jugadaA(self, f: int, c: int, x: int, y: int) -> bool:
+        if self[f, c] == "A":
+            if self.valid_moveA(f, c, x, y):
+                self[x, y] = self.__jugadorA
+                self[f, c] = "·"
+                return True
+            else:
+                return False
+
+    def jugadaB(self, f: int, c: int, x: int, y: int) -> bool:
+        if self[f, c] == "B":
+            if self.valid_moveB(x, y):
+                self[x, y] = self.__jugadorB
+                self[f, c] = "·"
+                return True
+            else:
+                return False
+
+    def valid_moveA(self, f, c, x, y):
+        if [f-x, c-y] == [1,0] or [f-x, c-y] == [-1,0] or [f-x, c-y] == [0,1] or [f-x, c-y] == [0,-1]:
+            return self[x, y] == "B"
+        else: 
             return False
 
-    def jugadaB(self, r:int, c:int):
-        if self.valid_moveB(r, c):
-            self[r, c] = self.__jugadorB
-            return True
-        else:
-            return False
-
-    def valid_moveA(self, r, c):
-        return self[r, c] == "B"
-
-    def valid_moveB(self, r, c):
-            return self[r, c] == "A"
+    def valid_moveB(self, f, c, x, y):
+        if [f-x, c-y] == [1,0] or [f-x, c-y] == [-1,0] or [f-x, c-y] == [0,1] or [f-x, c-y] == [0,-1]:
+            return self[x, y] == "A"
