@@ -1,10 +1,24 @@
 from clobber import Clobber
+
+def pedir_entero(mensaje):
+    while True:
+        try:
+            valor = int(input(mensaje))
+            return valor
+        except ValueError:
+            print("Por favor, ingrese un número entero válido.")
+
 if __name__ == "__main__":
-    tamano = int(input("Tamaño n del tablero: "))
-    tablero = Clobber(tamano)
+    while True:
+        tamano = pedir_entero("Tamaño n del tablero (debe ser un número par mayor o igual a 4): ")
+        try:
+            tablero = Clobber(tamano)
+            break
+        except ValueError as error:
+            print(error)
     turno = "A"
     ganador = ""
-    hay_movimientos = True
+    hay_movimientos = True #en qué momento se ocupa esta variable??? la quiero borrar pero tengo miedo de que rompa algo xd
     while True:
         print(tablero)
         print(f"Turno del jugador {turno}: ")
@@ -14,8 +28,8 @@ if __name__ == "__main__":
             print(f"El jugador {turno} no tiene mas movimientos")
             break
         print("Escoja la ficha")
-        f = int(input("Fila: "))
-        c = int(input("Columna: "))
+        f = pedir_entero("Fila: ")
+        c = pedir_entero("columna: ")
 
         # Validamos si escogio una ficha valida
         try:
@@ -26,17 +40,21 @@ if __name__ == "__main__":
         if ficha_seleccionada != turno:
             print(f"Solo puedes mover las fichas '{turno}'. Intente de nuevo.\n")
             continue
-        x = int(input("\nHaga el movimiento\nFila: "))
-        y = int(input("Columna: "))
+        x = pedir_entero("\nHaga el movimiento\nFila: ")
+        y = pedir_entero("Columna: ")
 
         # Se realiza la jugada y pasa el siguiente turno
-        if tablero.jugada(f, c, x, y):
+        try:
+            movimiento_valido = tablero.jugada(f, c, x, y)
+        except LookupError:
+            print("Coordenadas fuera de rango. Intente de nuevo.\n")
+            continue
+        if movimiento_valido:
             ganador = turno
-            
             turno = "B" if turno == "A" else "A"
         else:
             print("Movimiento inválido. Intente de nuevo.\n")
 
-# Se muestra el resultado final
-print(tablero)
-print(f"Gana el jugador {ganador}")
+    # Se muestra el resultado final
+    print(tablero)
+    print(f"Gana el jugador {ganador}")

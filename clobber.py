@@ -5,12 +5,11 @@ class Clobber(Board):
 
 
     def __init__(self, tamano, jugadorA: str = "A", jugadorB: str = "B"):
+        if tamano < 4 or tamano % 2 != 0:
+            raise ValueError("El tamaño del tablero debe ser un número par mayor o igual a 4.")
         super().__init__(tamano)
         self.__jugadorA = jugadorA
         self.__jugadorB = jugadorB
-
-    def pedirTamano(self):
-        self.tamano = int(input("Tamaño n del tablero: "))
 
     def jugada(self, f: int, c: int, x: int, y: int) -> bool:
         if self[f, c] == "A":
