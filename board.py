@@ -24,7 +24,7 @@ class Board:
         # Cantidad de caracteres para la columna con número de fila
         offset = math.ceil(math.log10(self.__size))
         # Primera línea
-        board = " "*offset + " "
+        board = " " * offset + " "
         board += " ".join(chr(ord('A') + i) for i in range(self.__size)) + "\n"
         for i, line in enumerate(self.__places, 1):
             # Falta arreglar el ancho del primer número
@@ -63,12 +63,12 @@ class Board:
             # Si es una tupla
             # Si son más o menos que filas y columnas
             if len(subscript) != 2:
-                raise ValueError("Cooordinates with too many dimensions")
-            # Si la fila está fuera de rangoo
+                raise ValueError("Coordinates with too many dimensions")
+            # Si la fila está fuera de rango
             if not self.__check_valid_range(subscript[0]):
                 raise LookupError(f"Row out of range: {subscript[0]}")
             # Si la columna está fuera de rango
-            if not  self.__check_valid_range(subscript[1]):
+            if not self.__check_valid_range(subscript[1]):
                 raise LookupError(f"Column out of range: {subscript[1]}")
             return self.__places[subscript[0] - 1][subscript[1] - 1]
         elif isinstance(subscript, int):
@@ -80,7 +80,7 @@ class Board:
             # Si el índice no es del tipo correcto
             raise TypeError("Subscript must be integer or coordinates")
     
-    def __setitem__(self, key: tuple, value: str) ->  None:
+    def __setitem__(self, key: tuple, value: str) -> None:
         """Implementa self[key] = value
         
         El "índice" `key` tiene que ser un par de coordenadas
@@ -88,11 +88,11 @@ class Board:
         if not isinstance(key, tuple):
             raise TypeError(f"Subscript must be coordinates (tuple), not {type(key)}")
         if len(key) != 2:
-            raise ValueError("Cooordinates with too many dimensions")
-        # Si la fila está fuera de rangoo
+            raise ValueError("Coordinates with too many dimensions")
+        # Si la fila está fuera de rango
         if not self.__check_valid_range(key[0]):
             raise LookupError(f"Row out of range: {key[0]}")
         # Si la columna está fuera de rango
-        if not  self.__check_valid_range(key[1]):
+        if not self.__check_valid_range(key[1]):
             raise LookupError(f"Column out of range: {key[1]}")
         self.__places[key[0] - 1][key[1] - 1] = value

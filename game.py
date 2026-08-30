@@ -10,7 +10,8 @@ def pedir_entero(mensaje):
 
 if __name__ == "__main__":
     while True:
-        tamano = pedir_entero("Tamaño n del tablero (debe ser un número par mayor o igual a 4): ")
+        msg = "Tamaño n del tablero (debe ser un número par mayor o igual a 4): "
+        tamano = pedir_entero(msg)
         try:
             tablero = Clobber(tamano)
             break
@@ -18,14 +19,14 @@ if __name__ == "__main__":
             print(error)
     turno = "A"
     ganador = ""
-    hay_movimientos = True #en qué momento se ocupa esta variable??? la quiero borrar pero tengo miedo de que rompa algo xd
     while True:
         print(tablero)
         print(f"Turno del jugador {turno}: ")
 
         # Verificamos si hay movimientos disponibles
-        if not tablero.hayMovimientos():
-            print(f"El jugador {turno} no tiene mas movimientos")
+        if not tablero.hay_movimientos():
+            msg = f"El jugador {turno} no tiene mas movimientos"
+            print(msg)
             break
         print("Escoja la ficha")
         f = pedir_entero("Fila: ")
@@ -38,7 +39,8 @@ if __name__ == "__main__":
             print("Coordenadas fuera de rango. Intente de nuevo.\n")
             continue
         if ficha_seleccionada != turno:
-            print(f"Solo puedes mover las fichas '{turno}'. Intente de nuevo.\n")
+            msg = f"Solo puedes mover las fichas '{turno}'. Intente de nuevo.\n"
+            print(msg)
             continue
         x = pedir_entero("\nHaga el movimiento\nFila: ")
         y = pedir_entero("Columna: ")
