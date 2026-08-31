@@ -1,3 +1,7 @@
+#Nombres: Ian Arroyo | Patricio Frez | Andrés Peña
+#Rut: 21906291-5 | 21473128-2 | 22059517-K
+#NRC: 8328
+
 import math
 
 
