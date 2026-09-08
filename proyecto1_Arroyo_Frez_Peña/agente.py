@@ -1,6 +1,5 @@
 from tablero import Board
 from math import inf
-from game import ganador #ver k pasa con esta shiet
 from clobber import Clobber
 import copy
 
