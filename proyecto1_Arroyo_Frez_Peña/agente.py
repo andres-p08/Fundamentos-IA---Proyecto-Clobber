@@ -18,9 +18,13 @@ def movimientosPosibles(tablero, jugador):
                         for x, y in validos:
                             try:
                                 if tablero[x, y] == enemigo:
-                                    movimientos.append((f, c, x, y))
+                                        movimientos.append((f, c, x, y))
                             except LookupError:
                                     pass
+                        # Se informa una sola vez por estado evaluado, evitando imprimir la lista
+                        # completa cada vez que se encuentra una nueva jugada.
+                        if jugador == "B":
+                            print(f"Jugadas posibles para el agente B: {len(movimientos)}")
     return movimientos
 
 def miniMax(tablero, profundidad, agente, jugador_max="B"):

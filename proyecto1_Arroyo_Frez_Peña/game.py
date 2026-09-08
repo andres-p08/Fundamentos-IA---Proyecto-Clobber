@@ -3,6 +3,7 @@
 #NRC: 8328
 
 from clobber import Clobber
+import agente
 
 def pedir_entero(mensaje):
     while True:
@@ -32,11 +33,21 @@ if __name__ == "__main__":
             msg = f"El jugador {turno} no tiene mas movimientos"
             print(msg)
             break
+        if turno == "B":
+            # El agente elige y ejecuta directamente la mejor jugada calculada
+            # por minimax; no pasa por las preguntas destinadas al jugador A.
+            jugada = agente.mejorMovimiento(tablero, profundidad=3)
+            if jugada is not None:
+                tablero.jugada(*jugada)
+                ganador = turno
+                turno = "A"
+            continue
+
         print("Escoja la ficha")
         f = pedir_entero("Fila: ")
         c = pedir_entero("columna: ")
 
-        # Validamos si escogio una ficha valida
+        # Validamos que la ficha elegida pertenezca al jugador humano.
         try:
             ficha_seleccionada = tablero[f, c]
         except LookupError:
@@ -46,10 +57,11 @@ if __name__ == "__main__":
             msg = f"Solo puedes mover las fichas '{turno}'. Intente de nuevo.\n"
             print(msg)
             continue
+
         x = pedir_entero("\nHaga el movimiento\nFila: ")
         y = pedir_entero("Columna: ")
 
-        # Se realiza la jugada y pasa el siguiente turno
+        # Se realiza la jugada humana y se pasa el turno al agente.
         try:
             movimiento_valido = tablero.jugada(f, c, x, y)
         except LookupError:
@@ -57,7 +69,7 @@ if __name__ == "__main__":
             continue
         if movimiento_valido:
             ganador = turno
-            turno = "B" if turno == "A" else "A"
+            turno = "B"
         else:
             print("Movimiento inválido. Intente de nuevo.\n")
 
