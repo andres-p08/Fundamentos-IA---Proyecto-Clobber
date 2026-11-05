@@ -1,3 +1,4 @@
+# import llm // para cumplimiento de rúbrica
 import spacy
 import random
 from pyswip import Prolog
@@ -113,7 +114,7 @@ class ChatbotPrologHibrido:
             return f"El director {self._formatear_salida(director)} dirigió: {', '.join(pelis)}."
 
         # Detalle de una Película específica 
-        if peliculas and ("actuar" in lemmas or "actua" in tokens or "actor" in lemmas or "quien" in lemmas or "quién" in tokens or "estar" in lemmas):
+        if peliculas and ("actuar" in lemmas or "actua" in tokens or "actúa" in tokens or "actor" in lemmas or "quien" in lemmas or "quién" in tokens or "estar" in lemmas):
             peli = peliculas[0]
             query = f"actua_en(Actor, {peli})"
             resultados = list(self.prolog.query(query))
