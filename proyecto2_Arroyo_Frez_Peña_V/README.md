@@ -106,3 +106,74 @@ Al iniciar, el programa solicitará una API Key de Groq si no está configurada 
 * Nemotron utiliza la variante gratuita de OpenRouter, sujeta a disponibilidad y límites de uso.
 * GPT-OSS 120B utiliza el plan gratuito de GroqCloud, sujeto a sus límites de solicitudes y tokens.
 * Las respuestas están condicionadas por la información disponible en la base de conocimientos y pueden variar según el modelo utilizado.
+
+## Chatbot LLM con DeepSeek-R1 8B y Ollama en Google Colab
+
+Chatbot de películas que utiliza DeepSeek-R1 8B mediante Ollama, ejecutado en Google Colab con aceleración por GPU.
+
+**Modelo: deepseek-r1:8b**
+
+**Requisitos**
+
+* Cuenta de Google y acceso a Google Colab.
+* Conexión a internet.
+* Entorno de ejecución con GPU habilitada.
+* Archivo Chatbot_Prolog.pl.
+
+**Ejecución**
+
+Abrir el notebook Proyecto2_Ollama_DeepSeek.ipynb en Google Colab y ejecutar las celdas en orden.
+
+1. Instalar Ollama e iniciar el servidor.
+2. Descargar el modelo DeepSeek-R1 8B.
+3. Cargar la base de conocimientos Chatbot_Prolog.pl.
+4. Ejecutar el chatbot y realizar preguntas en lenguaje natural.
+
+**Funcionamiento**
+
+* Ollama ejecuta el modelo DeepSeek-R1 8B dentro del entorno de Google Colab.
+* La inferencia se realiza utilizando la GPU disponible en Colab.
+* Python lee la base de conocimientos existente y proporciona sus hechos y reglas como contexto al modelo.
+* El programa no ejecuta SWI-Prolog ni realiza consultas Prolog.
+* Las preguntas se realizan en lenguaje natural y las respuestas se generan mediante el LLM.
+* El chatbot mantiene el contexto de la conversación durante su ejecución.
+
+## Chatbot LLM con Hermes 3 8B y Ollama en Google Colab
+
+Chatbot de películas que utiliza Hermes 3 8B mediante Ollama, ejecutado en Google Colab con aceleración por GPU.
+
+**Modelo: hermes3:8b**
+
+**Requisitos**
+
+* Cuenta de Google y acceso a Google Colab.
+* Conexión a internet.
+* Entorno de ejecución con GPU habilitada.
+* Archivo Chatbot_Prolog.pl.
+
+**Ejecución**
+
+Abrir el notebook Chatbot_Hermes.ipynb en Google Colab y ejecutar las celdas en orden.
+
+1. Instalar Ollama e iniciar el servidor.
+2. Descargar el modelo Hermes 3 8B.
+3. Cargar la base de conocimientos Chatbot_Prolog.pl.
+4. Ejecutar el chatbot y realizar preguntas en lenguaje natural.
+
+**Funcionamiento**
+
+* Ollama ejecuta el modelo Hermes 3 8B dentro del entorno de Google Colab.
+* La inferencia se realiza utilizando la GPU disponible en Colab.
+* Python lee la base de conocimientos existente y proporciona sus hechos y reglas como contexto al modelo.
+* El programa no ejecuta SWI-Prolog ni realiza consultas Prolog.
+* Las preguntas se realizan en lenguaje natural y las respuestas se generan mediante el LLM.
+* El chatbot mantiene el contexto de la conversación durante su ejecución.
+
+**Consideraciones para ambos chatbots**
+
+* No requieren instalar Ollama en el computador local; la ejecución se realiza en Google Colab.
+* No requieren API Keys, ya que los modelos se ejecutan mediante Ollama en el entorno de Colab.
+* Se necesita conexión a internet para instalar Ollama y descargar los modelos.
+* La disponibilidad de GPU está sujeta a los recursos y límites de Google Colab.
+* Si se reinicia o desconecta el entorno, puede ser necesario volver a ejecutar las celdas y descargar el modelo.
+* Las respuestas están condicionadas por la información disponible en la base de conocimientos y pueden variar según el modelo utilizado.
