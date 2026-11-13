@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Chatbot de películas</title>
+    <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+    <main>
+        <h1>Chatbot de películas</h1>
+        <p>Nemotron 2 + SWI-Prolog</p>
+
+        <div id="conversacion"></div>
+
+        <form id="formulario">
+            <input id="pregunta" type="text"
+                   placeholder="Escribe una pregunta..."
+                   maxlength="400" required>
+            <button id="enviar" type="submit">Enviar</button>
+        </form>
+
+        <p id="estado"></p>
+    </main>
+
+    <script src="/static/app.js"></script>
+</body>
+</html>
