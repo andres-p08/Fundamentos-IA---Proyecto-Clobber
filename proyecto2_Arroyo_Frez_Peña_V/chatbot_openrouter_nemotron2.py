@@ -58,6 +58,7 @@ Reglas:
 - maximo_rating=true solo si pide la de mayor puntuación.
 - Usa el historial para preguntas de seguimiento; pide aclarar si es ambiguo.
 - Traduce siempre aunque no conozcas la película.
+- Prioriza respuestas completas pero concisas: incluye todos los datos relevantes solicitados, incluso cuando se utilicen para filtrar, comparar u ordenar resultados.
 
 Ejemplos:
 "¿Quién dirigió X y en qué año salió?" -> {"accion":"consulta","campos":["director","anio"],"filtros":[{"campo":"pelicula","op":"eq","valor":"X"}],"maximo_rating":false}
