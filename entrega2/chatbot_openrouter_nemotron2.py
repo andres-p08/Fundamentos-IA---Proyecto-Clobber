@@ -236,8 +236,8 @@ def presentar(filas, campos, truncado):
 
 
 def llamar_modelo(clave, pregunta, historial):
-    """Envía al modelo el esquema y la pregunta, nunca hechos de la KB."""
-    texto = ("Historial de consultas (sin datos de la KB): "
+    """Envía al modelo el esquema, la última interacción y la pregunta."""
+    texto = ("Última interacción: "
              + json.dumps(historial[-3:], ensure_ascii=False)
              + "\nPregunta: " + pregunta)
     cuerpo = {
@@ -335,41 +335,50 @@ def main():
     print("Escribe 'salir' para terminar.\n")
     historial = []
     while True:
-        try:
-            pregunta = input("Tú > ").strip()
-        except (EOFError, KeyboardInterrupt):
-            print("\nHasta luego.")
-            break
-        if pregunta.lower() in {"salir", "exit", "quit"}:
-            print("Hasta luego.")
-            break
-        if not pregunta:
-            continue
-        try:
-            generado, tiempo_llm, uso = llamar_modelo(clave, pregunta, historial)
-            plan = validar_plan(generado, indices)
-            if args.debug:
-                print("Traducción:", json.dumps(plan, ensure_ascii=False))
-            if plan["accion"] == "consulta":
-                filas, truncado, tiempo_kb, consulta = consultar_prolog(prolog, plan)
+            try:
+                pregunta = input("Tú > ").strip()
+            except (EOFError, KeyboardInterrupt):
+                print("\nHasta luego.")
+                break
+            if pregunta.lower() in {"salir", "exit", "quit"}:
+                print("Hasta luego.")
+                break
+            if not pregunta:
+                continue
+            try:
+                generado, tiempo_llm, uso = llamar_modelo(clave, pregunta, historial)
+                plan = validar_plan(generado, indices)
                 if args.debug:
-                    print("Prolog:", consulta)
-                print("\nChatbot > " + presentar(filas, plan["campos"], truncado))
-                print(f"Tiempo LLM: {tiempo_llm:.2f}s | Prolog: {tiempo_kb:.4f}s")
-                cantidad = len(filas)
-            else:
-                print("\nChatbot > " + plan.get("mensaje", "No entendí la pregunta."))
-                print(f"Tiempo LLM: {tiempo_llm:.2f}s")
-                cantidad = 0
-            if uso:
-                print(f"Tokens: {uso.get('prompt_tokens', '?')} entrada, "
-                      f"{uso.get('completion_tokens', '?')} salida")
-            print()
-            historial.append({"pregunta": pregunta, "plan": plan,
-                              "cantidad_resultados": cantidad})
-            historial = historial[-3:]
-        except (RuntimeError, ValueError, TypeError, KeyError) as exc:
-            print(f"\nError: {exc}\n")
+                    print("Traducción:", json.dumps(plan, ensure_ascii=False))
+
+                if plan["accion"] == "consulta":
+                    filas, truncado, tiempo_kb, consulta = consultar_prolog(prolog, plan)
+                    if args.debug:
+                        print("Prolog:", consulta)
+                    respuesta_bot = presentar(filas, plan["campos"], truncado)
+                    print("\nChatbot > " + respuesta_bot)
+                    print(f"Tiempo LLM: {tiempo_llm:.2f}s | Prolog: {tiempo_kb:.4f}s")
+                    # Guardamos máximo 10 filas en memoria para no disparar los tokens
+                    respuesta_historial = presentar(filas[:10], plan["campos"], len(filas) > 10)
+                else:
+                    respuesta_bot = plan.get("mensaje", "No entendí la pregunta.")
+                    print("\nChatbot > " + respuesta_bot)
+                    print(f"Tiempo LLM: {tiempo_llm:.2f}s")
+                    respuesta_historial = respuesta_bot
+
+                if uso:
+                    print(f"Tokens: {uso.get('prompt_tokens', '?')} entrada, "
+                        f"{uso.get('completion_tokens', '?')} salida")
+                print()
+
+                # Sobrescribe historial para conservar únicamente la última interacción
+                historial = [{
+                    "pregunta": pregunta,
+                    "plan": plan,
+                    "respuesta": respuesta_historial,
+                }]
+            except (RuntimeError, ValueError, TypeError, KeyError) as exc:
+                print(f"\nError: {exc}\n")
     return 0
 
 
