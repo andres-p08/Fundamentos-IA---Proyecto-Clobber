@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="es">
 <head>
@@ -11,16 +12,46 @@
         <h1>Chatbot de películas</h1>
         <p>Nemotron 2 + SWI-Prolog</p>
 
-        <div id="conversacion"></div>
+        <section id="acceso">
+            <h2>Iniciar chatbot</h2>
+            <p>Introduce tu propia API Key de OpenRouter.</p>
 
-        <form id="formulario">
-            <input id="pregunta" type="text"
-                   placeholder="Escribe una pregunta..."
-                   maxlength="400" required>
-            <button id="enviar" type="submit">Enviar</button>
-        </form>
+            <form id="formulario-clave" autocomplete="off">
+                <input
+                    id="clave"
+                    type="password"
+                    placeholder="API Key de OpenRouter"
+                    autocomplete="off"
+                    spellcheck="false"
+                    required
+                    maxlength="256"
+                >
+                <button type="submit">Iniciar</button>
+            </form>
 
-        <p id="estado"></p>
+            <p>
+                La clave se utiliza durante esta sesión
+                y no se guarda en el servidor.
+            </p>
+        </section>
+
+        <section id="chat" hidden>
+            <div id="conversacion" aria-live="polite"></div>
+
+            <form id="formulario">
+                <input
+                    id="pregunta"
+                    type="text"
+                    placeholder="Escribe una pregunta..."
+                    maxlength="400"
+                    required
+                >
+                <button id="enviar" type="submit">Enviar</button>
+            </form>
+
+            <p id="estado"></p>
+            <button id="salir" type="button">Cerrar sesión</button>
+        </section>
     </main>
 
     <script src="/static/app.js"></script>

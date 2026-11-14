@@ -1,5 +1,5 @@
 
-"""Backend web sencillo para Nemotron 2 y SWI-Prolog."""
+"""Backend web para Nemotron 2 y SWI-Prolog."""
 
 import os
 import re
@@ -14,16 +14,10 @@ import chatbot_openrouter_nemotron2 as chatbot
 app = Flask(__name__, static_folder="frontend", static_url_path="/static")
 app.config["MAX_CONTENT_LENGTH"] = 2048
 
-clave = os.getenv("OPENROUTER_API_KEY", "").strip()
-if not clave:
-    raise RuntimeError("Falta configurar OPENROUTER_API_KEY.")
-
-# Cargamos la misma base utilizada por Nemotron en la terminal.
 prolog = Prolog()
 prolog.consult(str(chatbot.ARCHIVO_KB))
 indices = chatbot.crear_indice(prolog)
 
-# Guardamos las últimas tres preguntas de cada conversación.
 historiales = {}
 
 
@@ -45,16 +39,25 @@ def responder():
     if not isinstance(datos, dict):
         return jsonify({"error": "Se requiere un JSON válido."}), 400
 
-    if set(datos) - {"pregunta", "sesion"}:
+    if set(datos) - {"pregunta", "sesion", "clave_api"}:
         return jsonify({"error": "Campos no permitidos."}), 400
 
+    # La clave se recibe para esta petición, sin guardarla.
+    clave = datos.get("clave_api")
+    if (not isinstance(clave, str)
+            or not 20 <= len(clave) <= 256
+            or any(c.isspace() for c in clave)):
+        return jsonify({"error": "Introduce una API Key válida."}), 400
+
     pregunta = datos.get("pregunta")
-    if not isinstance(pregunta, str) or not 1 <= len(pregunta.strip()) <= 400:
+    if (not isinstance(pregunta, str)
+            or not 1 <= len(pregunta.strip()) <= 400):
         return jsonify({"error": "Pregunta inválida."}), 400
 
     sesion = datos.get("sesion")
     if sesion is not None:
-        if not isinstance(sesion, str) or not re.fullmatch(r"[0-9a-f]{32}", sesion):
+        if (not isinstance(sesion, str)
+                or not re.fullmatch(r"[0-9a-f]{32}", sesion)):
             return jsonify({"error": "Sesión inválida."}), 400
 
     pregunta = pregunta.strip()
@@ -66,18 +69,16 @@ def responder():
             clave, pregunta, historial
         )
 
-        # Solo se aceptan campos, filtros y reglas autorizados.
         plan = chatbot.validar_plan(generado, indices)
-
-        cantidad = 0
         tiempo_prolog = 0.0
 
         if plan["accion"] == "consulta":
-            filas, truncado, tiempo_prolog, _ = chatbot.consultar_prolog(
-                prolog, plan
+            filas, truncado, tiempo_prolog, _ = (
+                chatbot.consultar_prolog(prolog, plan)
             )
-            respuesta = chatbot.presentar(filas, plan["campos"], truncado)
-            cantidad = len(filas)
+            respuesta = chatbot.presentar(
+                filas, plan["campos"], truncado, plan["operacion"]
+            )
 
         elif plan["accion"] == "aclarar":
             respuesta = plan["mensaje"]
@@ -85,20 +86,44 @@ def responder():
         else:
             respuesta = "No entendí la pregunta."
 
+    except RuntimeError as error:
+        detalle = str(error)
+
+        if "HTTP 401" in detalle or "HTTP 403" in detalle:
+            return jsonify({
+                "error": "API Key rechazada por OpenRouter."
+            }), 401
+
+        if "HTTP 429" in detalle:
+            return jsonify({
+                "error": "Límite de solicitudes de OpenRouter alcanzado."
+            }), 429
+
+        print("Error de OpenRouter:", type(error).__name__)
+        return jsonify({
+            "error": "No se pudo conectar con OpenRouter."
+        }), 502
+
+    except (ValueError, TypeError, KeyError) as error:
+        print("Error de traducción:", type(error).__name__)
+        return jsonify({
+            "error": "No pude interpretar la consulta."
+        }), 422
+
     except Exception as error:
-        print("Error del backend:", error)
-        return jsonify({"error": "No se pudo procesar la consulta."}), 502
+        print("Error del backend:", type(error).__name__)
+        return jsonify({
+            "error": "No se pudo procesar la consulta."
+        }), 502
 
     if sesion not in historiales and len(historiales) >= 100:
         historiales.pop(next(iter(historiales)))
 
-    historiales[sesion] = (
-        historial + [{
-            "pregunta": pregunta,
-            "plan": plan,
-            "cantidad_resultados": cantidad,
-        }]
-    )[-3:]
+    # Solo se almacenan preguntas y planes.
+    # No guardamos la API Key ni respuestas de Prolog.
+    historiales[sesion] = chatbot.guardar_historial(
+        historial, pregunta, plan
+    )
 
     return jsonify({
         "sesion": sesion,

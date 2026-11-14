@@ -1,4 +1,5 @@
-"""Chatbot híbrido: el LLM traduce preguntas y SWI-Prolog consulta la KB."""
+
+"""Chatbot híbrido: Nemotron traduce y SWI-Prolog consulta la KB."""
 
 import argparse
 import getpass
@@ -20,226 +21,536 @@ VARIABLE_CLAVE = "OPENROUTER_API_KEY"
 PROVEEDOR = "OpenRouter"
 ARCHIVO_KB = Path(__file__).resolve().parent / "Chatbot_Prolog.pl"
 
+MAX_HISTORIAL = 2
+MAX_RESULTADOS = 1000
+
 CAMPOS = {
-    "pelicula": "Pelicula", "anio": "Anio", "edad": "Edad",
-    "duracion": "Duracion", "rating": "Rating", "genero": "Genero",
-    "actor": "Actor", "director": "Director",
-    "anio_actor": "NacimientoActor", "anio_director": "NacimientoDirector",
+    "pelicula": "Pelicula",
+    "anio": "Anio",
+    "edad": "Edad",
+    "duracion": "Duracion",
+    "rating": "Rating",
+    "genero": "Genero",
+    "actor": "Actor",
+    "director": "Director",
+    "anio_actor": "NacimientoActor",
+    "anio_director": "NacimientoDirector",
 }
-NUMERICOS = {"anio", "edad", "duracion", "rating", "anio_actor", "anio_director"}
+
+NUMERICOS = {
+    "anio", "edad", "duracion", "rating",
+    "anio_actor", "anio_director",
+}
+
 REGLAS = {
-    "pelicula_clasica", "pelicula_nueva", "pelicula_corta",
-    "pelicula_larga", "buen_rating", "mal_rating",
-    "restriccion_mayores_18", "apta_todo_publico", "es_comedia",
+    "pelicula_clasica", "pelicula_nueva",
+    "pelicula_corta", "pelicula_larga",
+    "buen_rating", "mal_rating",
+    "restriccion_mayores_18", "apta_todo_publico",
+    "es_comedia",
 }
-OPERADORES = {"eq": "=", "lt": "<", "le": "=<", "gt": ">", "ge": ">="}
+
+OPERADORES = {
+    "eq": "=",
+    "lt": "<",
+    "le": "=<",
+    "gt": ">",
+    "ge": ">=",
+}
+
+ORDENABLES = {"pelicula", "anio", "duracion", "rating"}
+
+CONTADORES = {
+    "pelicula": "películas",
+    "actor": "actores",
+    "director": "directores",
+    "genero": "géneros",
+}
+
 ETIQUETAS = {
-    "pelicula": "Película", "anio": "Año", "edad": "Edad mínima",
-    "duracion": "Duración (min)", "rating": "Puntuación",
-    "genero": "Género", "actor": "Actor", "director": "Director",
+    "pelicula": "Película",
+    "anio": "Año",
+    "edad": "Edad mínima",
+    "duracion": "Duración",
+    "rating": "Puntuación",
+    "genero": "Género",
+    "actor": "Actor",
+    "director": "Director",
     "anio_actor": "Nacimiento del actor",
     "anio_director": "Nacimiento del director",
 }
 
-PROMPT = """Convierte preguntas de cine en JSON válido (sin texto ni Markdown). No respondas preguntas; solo traduce la consulta.
 
-Salidas posibles:
-- {"accion":"consulta","campos":["pelicula"],"filtros":[{"campo":"...","op":"...","valor":...}],"maximo_rating":false}
+PROMPT = """Traduce preguntas de cine a JSON válido sin Markdown. Nunca respondas con conocimiento propio; solo produce el plan.
+
+Planes:
+- {"accion":"consulta","campos":["pelicula"],"filtros":[],"maximo_rating":false,"operacion":"listar","ordenar_por":null,"orden":"asc","limite":null}
 - {"accion":"aclarar","mensaje":"¿A cuál te refieres?"}
 - {"accion":"no_entendido"}
 
 Campos: pelicula, anio, edad, duracion, rating, genero, actor, director, anio_actor, anio_director.
-Filtros extra (solo op "eq"):
-- regla: pelicula_clasica, pelicula_nueva, pelicula_corta, pelicula_larga, buen_rating, mal_rating, restriccion_mayores_18, apta_todo_publico, es_comedia.
-- director_de / actor_de: nombre de película.
+Filtros: {"campo":"...","op":"eq|lt|le|gt|ge","valor":...}. Texto solo eq; números sin comillas.
+Filtros extra (solo eq): regla [pelicula_clasica, pelicula_nueva, pelicula_corta, pelicula_larga, buen_rating, mal_rating, restriccion_mayores_18, apta_todo_publico, es_comedia], director_de, actor_de (estos dos reciben nombre de película).
 
-Reglas:
-- Operadores: eq, lt, le, gt, ge. Texto solo admite eq; usa números sin comillas para valores numéricos.
-- maximo_rating=true solo si pide la de mayor puntuación.
-- Usa el historial para preguntas de seguimiento; pide aclarar si es ambiguo.
-- Traduce siempre aunque no conozcas la película.
-- Prioriza respuestas completas pero concisas: incluye todos los datos relevantes solicitados, incluso cuando se utilicen para filtrar, comparar u ordenar resultados.
+- operacion: listar o contar. Para contar películas usa campos:["pelicula"]; para contar actores, directores o géneros, usa ese campo único.
+- ordenar_por: null, pelicula, anio, duracion o rating; orden: asc o desc.
+- limite: null o entero positivo. Para un top N, indica ordenar_por, orden y limite N.
+- maximo_rating=true únicamente cuando se pregunta por el rating máximo absoluto (no para top N).
+- Para ordenar por antigüedad: anio asc (vieja a nueva) o desc (nueva a vieja).
+- Para mejores puntuaciones: rating desc; peores: rating asc; más largas: duracion desc.
+- Incluye pelicula en campos de listas y conserva campos relevantes para entender el resultado.
+- El historial contiene preguntas y planes, nunca respuestas ni hechos de la KB.
+- Si preguntan "¿y cuánto dura?", "¿en qué año?" o algo similar, conserva la película de la consulta anterior. Si mencionan otra película, reemplaza el filtro anterior.
+- Si la consulta anterior fue un conteo y preguntan "¿cuáles son?", "¿cuál es esa?" o "muéstramelas", cambia contar por listar y conserva todos los filtros.
+- Si pediste una aclaración y el usuario responde con el nombre de una película, completa la pregunta pendiente usando ese título. Si hay varias interpretaciones posibles, pide aclaración.
+- Traduce aunque desconozcas la película; si la pregunta es ajena al esquema, no_entendido.
 
 Ejemplos:
-"¿Quién dirigió X y en qué año salió?" -> {"accion":"consulta","campos":["director","anio"],"filtros":[{"campo":"pelicula","op":"eq","valor":"X"}],"maximo_rating":false}
-"Comedias aptas para todo público de menos de 100 min" -> {"accion":"consulta","campos":["pelicula"],"filtros":[{"campo":"regla","op":"eq","valor":"apta_todo_publico"},{"campo":"genero","op":"eq","valor":"comedia"},{"campo":"duracion","op":"lt","valor":100}],"maximo_rating":false}
+"¿Cuántas comedias hay?" -> {"accion":"consulta","campos":["pelicula"],"filtros":[{"campo":"genero","op":"eq","valor":"comedia"}],"maximo_rating":false,"operacion":"contar","ordenar_por":null,"orden":"asc","limite":null}
+"Top 5 mejor puntuadas" -> {"accion":"consulta","campos":["pelicula","rating"],"filtros":[],"maximo_rating":false,"operacion":"listar","ordenar_por":"rating","orden":"desc","limite":5}
+"Ordena películas de la más vieja a la más nueva" -> {"accion":"consulta","campos":["pelicula","anio"],"filtros":[],"maximo_rating":false,"operacion":"listar","ordenar_por":"anio","orden":"asc","limite":null}
+"¿Quién dirigió X?" -> {"accion":"consulta","campos":["director"],"filtros":[{"campo":"pelicula","op":"eq","valor":"X"}],"maximo_rating":false,"operacion":"listar","ordenar_por":null,"orden":"asc","limite":null}
+"¿Cuántas películas hay en la KB?" -> {"accion":"consulta","campos":["pelicula"],"filtros":[],"maximo_rating":false,"operacion":"contar","ordenar_por":null,"orden":"asc","limite":null}
 """
 
 
 def normalizar(texto):
-    """Iguala nombres con/sin acentos, espacios, signos o guiones bajos."""
+    """Iguala nombres con o sin acentos, espacios y signos."""
     texto = unicodedata.normalize("NFKD", str(texto).casefold())
-    return "".join(c for c in texto if c.isascii() and c.isalnum())
+    return "".join(
+        c for c in texto if c.isascii() and c.isalnum()
+    )
 
 
 def atomo_seguro(texto):
-    """Restringe todo valor de texto a átomos Prolog sin código ejecutable."""
+    """Convierte texto a un átomo Prolog sin código ejecutable."""
     if not isinstance(texto, str):
         raise ValueError("El valor de texto no es válido.")
+
     texto = unicodedata.normalize("NFKD", texto.casefold())
-    texto = "".join(c for c in texto if not unicodedata.combining(c))
+    texto = "".join(
+        c for c in texto if not unicodedata.combining(c)
+    )
     texto = re.sub(r"[^a-z0-9]+", "_", texto).strip("_")
+
     if not re.fullmatch(r"[a-z][a-z0-9_]*", texto):
         raise ValueError("No se pudo identificar el nombre solicitado.")
+
     return texto
 
 
 def crear_indice(prolog):
-    """Indexa nombres localmente una sola vez; nunca los envía al LLM."""
+    """Indexa nombres localmente sin enviarlos al LLM."""
     consultas = {
-        "pelicula": ("pelicula(Pelicula, _, _, _, _)", "Pelicula"),
+        "pelicula": (
+            "pelicula(Pelicula, _, _, _, _)", "Pelicula"
+        ),
         "actor": ("actor(Actor, _)", "Actor"),
         "director": ("director(Director, _)", "Director"),
     }
+
     indices = {}
+
     for categoria, (consulta, variable) in consultas.items():
         indice = {}
+
         for fila in prolog.query(consulta):
             valor = str(fila[variable])
-            indice.setdefault(normalizar(valor), set()).add(valor)
+            indice.setdefault(
+                normalizar(valor), set()
+            ).add(valor)
+
         indices[categoria] = indice
+
     return indices
 
 
 def validar_plan(plan, indices):
-    """Comprueba que Nemotron/GPT-OSS solo solicite operaciones autorizadas."""
+    """Autoriza campos y operaciones antes de consultar Prolog."""
     if not isinstance(plan, dict):
         raise ValueError("La traducción no es un objeto JSON.")
+
     accion = plan.get("accion")
+
     if accion == "no_entendido":
         return {"accion": accion}
+
     if accion == "aclarar":
-        return {"accion": accion, "mensaje": str(plan.get(
-            "mensaje", "¿Puedes aclarar tu pregunta?"))[:180]}
+        return {
+            "accion": accion,
+            "mensaje": str(
+                plan.get(
+                    "mensaje", "¿Puedes aclarar tu pregunta?"
+                )
+            )[:180],
+        }
+
     if accion != "consulta":
         raise ValueError("Operación no permitida.")
 
+    operacion = plan.get("operacion", "listar")
+
+    if operacion not in {"listar", "contar"}:
+        raise ValueError("Operación desconocida.")
+
     campos = plan.get("campos")
-    filtros = plan.get("filtros")
-    if (not isinstance(campos, list) or not 1 <= len(campos) <= 6
-            or any(c not in CAMPOS for c in campos)):
+
+    if operacion == "contar" and campos in (None, []):
+        campos = ["pelicula"]
+
+    if (
+        not isinstance(campos, list)
+        or not 1 <= len(campos) <= 6
+        or any(
+            not isinstance(c, str) or c not in CAMPOS
+            for c in campos
+        )
+    ):
         raise ValueError("Campos de salida no permitidos.")
+
+    campos = list(dict.fromkeys(campos))
+
+    if operacion == "contar":
+        if len(campos) != 1 or campos[0] not in CONTADORES:
+            raise ValueError(
+                "Solo se puede contar una categoría por consulta."
+            )
+
+    ordenar_por = plan.get("ordenar_por")
+    orden = plan.get("orden", "asc")
+    limite = plan.get("limite")
+
+    if ordenar_por is not None and ordenar_por not in ORDENABLES:
+        raise ValueError("Campo de ordenamiento no permitido.")
+
+    if orden not in {"asc", "desc"}:
+        raise ValueError("Dirección de ordenamiento no válida.")
+
+    if limite is not None:
+        if type(limite) is not int or not 1 <= limite <= 50:
+            raise ValueError("Límite fuera de rango (1 a 50).")
+
+    if operacion == "contar":
+        if ordenar_por is not None or limite is not None:
+            raise ValueError(
+                "El conteo no admite ordenamiento ni límite."
+            )
+
+    if ordenar_por is None and orden != "asc":
+        raise ValueError(
+            "No se puede ordenar sin indicar un campo."
+        )
+
+    if ordenar_por is not None:
+        if "pelicula" not in campos:
+            campos.insert(0, "pelicula")
+
+        if ordenar_por not in campos:
+            campos.append(ordenar_por)
+
+        if len(campos) > 6:
+            raise ValueError("Demasiados campos de salida.")
+
+    filtros = plan.get("filtros")
+
     if not isinstance(filtros, list) or len(filtros) > 8:
         raise ValueError("Filtros no permitidos.")
 
     validados = []
+
     for filtro in filtros:
         if not isinstance(filtro, dict):
             raise ValueError("Filtro incorrecto.")
+
         campo = filtro.get("campo")
         op = filtro.get("op")
         valor = filtro.get("valor")
-        if campo not in set(CAMPOS) | {"regla", "director_de", "actor_de"}:
+
+        if campo not in set(CAMPOS) | {
+            "regla", "director_de", "actor_de"
+        }:
             raise ValueError("Campo de filtro desconocido.")
+
         if op not in OPERADORES:
             raise ValueError("Operador desconocido.")
+
         if campo == "regla":
             if op != "eq" or valor not in REGLAS:
                 raise ValueError("Regla no autorizada.")
+
         elif campo in NUMERICOS:
-            if (isinstance(valor, bool) or not isinstance(valor, (int, float))
-                    or not -1000000 < valor < 1000000):
+            if (
+                type(valor) not in (int, float)
+                or not -1000000 < valor < 1000000
+            ):
                 raise ValueError("Filtro numérico inválido.")
+
         else:
             if op != "eq":
-                raise ValueError("El filtro de texto requiere igualdad.")
-            categoria = ("pelicula" if campo in {"director_de", "actor_de"}
-                         else campo)
+                raise ValueError(
+                    "El filtro de texto requiere igualdad."
+                )
+
+            categoria = (
+                "pelicula"
+                if campo in {"director_de", "actor_de"}
+                else campo
+            )
+
             atom = atomo_seguro(valor)
+
             if categoria in indices:
-                coincidencias = indices[categoria].get(normalizar(valor), set())
+                coincidencias = indices[categoria].get(
+                    normalizar(valor), set()
+                )
+
                 if len(coincidencias) > 1:
-                    raise ValueError(f"Nombre ambiguo: {valor}.")
+                    raise ValueError(
+                        f"Nombre ambiguo: {valor}."
+                    )
+
                 if coincidencias:
                     atom = next(iter(coincidencias))
+
             valor = atom
-        validados.append({"campo": campo, "op": op, "valor": valor})
+
+        validados.append({
+            "campo": campo,
+            "op": op,
+            "valor": valor,
+        })
 
     return {
-        "accion": "consulta", "campos": list(dict.fromkeys(campos)),
+        "accion": "consulta",
+        "campos": campos,
         "filtros": validados,
         "maximo_rating": plan.get("maximo_rating") is True,
+        "operacion": operacion,
+        "ordenar_por": ordenar_por,
+        "orden": orden,
+        "limite": limite,
     }
 
 
 def construir_consulta(plan):
     """Conecta los hechos y reglas existentes sin alterar la KB."""
-    usados = set(plan["campos"]) | {f["campo"] for f in plan["filtros"]}
+    usados = set(plan["campos"]) | {
+        f["campo"] for f in plan["filtros"]
+    }
+
     if "director_de" in usados:
         usados.add("director")
+
     if "actor_de" in usados:
         usados.add("actor")
+
     metas = []
+
     for filtro in plan["filtros"]:
-        campo, valor = filtro["campo"], filtro["valor"]
+        campo = filtro["campo"]
+        valor = filtro["valor"]
+
         if campo in CAMPOS and campo not in NUMERICOS:
             metas.append(f"{CAMPOS[campo]} = {valor}")
+
         elif campo == "director_de":
             metas.append(f"dirige(Director, {valor})")
+
         elif campo == "actor_de":
             metas.append(f"actua_en(Actor, {valor})")
 
     if "actor" in usados or "anio_actor" in usados:
         metas.append("actua_en(Actor, Pelicula)")
+
     if "director" in usados or "anio_director" in usados:
         metas.append("dirige(Director, Pelicula)")
+
     if "genero" in usados:
         metas.append("genero(Pelicula, Genero)")
-    metas.append("pelicula(Pelicula, Anio, Edad, Duracion, Rating)")
+
+    metas.append(
+        "pelicula(Pelicula, Anio, Edad, Duracion, Rating)"
+    )
+
     if "anio_actor" in usados:
         metas.append("actor(Actor, NacimientoActor)")
+
     if "anio_director" in usados:
         metas.append("director(Director, NacimientoDirector)")
 
     for filtro in plan["filtros"]:
-        campo, op, valor = filtro["campo"], filtro["op"], filtro["valor"]
+        campo = filtro["campo"]
+        op = filtro["op"]
+        valor = filtro["valor"]
+
         if campo == "regla":
             metas.append(f"{valor}(Pelicula)")
+
         elif campo in NUMERICOS:
-            metas.append(f"{CAMPOS[campo]} {OPERADORES[op]} {valor}")
+            metas.append(
+                f"{CAMPOS[campo]} {OPERADORES[op]} {valor}"
+            )
 
     cuerpo = ", ".join(metas)
+
     if plan["maximo_rating"]:
-        return (f"aggregate_all(max(Rating), ({cuerpo}), MaxRating), "
-                f"({cuerpo}), Rating =:= MaxRating")
+        return (
+            f"aggregate_all(max(Rating), ({cuerpo}), MaxRating), "
+            f"({cuerpo}), Rating =:= MaxRating"
+        )
+
     return cuerpo
 
 
 def consultar_prolog(prolog, plan):
+    """Consulta Prolog y procesa conteos y ordenamientos en Python."""
     consulta = construir_consulta(plan)
     inicio = time.perf_counter()
-    filas = list(prolog.query(consulta, maxresult=51))
+
+    filas_prolog = list(
+        prolog.query(
+            consulta,
+            maxresult=MAX_RESULTADOS + 1,
+        )
+    )
+
     tiempo = time.perf_counter() - inicio
-    resultado, vistos = [], set()
-    for fila in filas:
-        valores = tuple(str(fila[CAMPOS[c]]) for c in plan["campos"])
+
+    if len(filas_prolog) > MAX_RESULTADOS:
+        raise ValueError(
+            "Demasiados resultados; agrega más filtros."
+        )
+
+    campos = plan["campos"]
+    resultado = []
+    vistos = set()
+
+    for fila in filas_prolog:
+        valores = tuple(
+            str(fila[CAMPOS[c]]) for c in campos
+        )
+
+        # Evita contar o mostrar duplicados de relaciones.
         if valores not in vistos:
             vistos.add(valores)
             resultado.append(valores)
-    return resultado[:50], len(filas) > 50, tiempo, consulta
+
+    if plan["operacion"] == "contar":
+        return resultado, False, tiempo, consulta
+
+    ordenar_por = plan["ordenar_por"]
+
+    if ordenar_por is not None:
+        # Criterio secundario: título alfabético.
+        pelicula_idx = campos.index("pelicula")
+
+        resultado.sort(
+            key=lambda f: normalizar(f[pelicula_idx])
+        )
+
+        indice = campos.index(ordenar_por)
+        descendente = plan["orden"] == "desc"
+
+        if ordenar_por in NUMERICOS:
+            resultado.sort(
+                key=lambda f: float(f[indice]),
+                reverse=descendente,
+            )
+
+        else:
+            resultado.sort(
+                key=lambda f: normalizar(f[indice]),
+                reverse=descendente,
+            )
+
+    limite = plan["limite"]
+
+    if limite is not None:
+        return resultado[:limite], False, tiempo, consulta
+
+    return (
+        resultado[:50],
+        len(resultado) > 50,
+        tiempo,
+        consulta,
+    )
 
 
-def presentar(filas, campos, truncado):
+def presentar(filas, campos, truncado, operacion="listar"):
+    """Presenta los resultados incluyendo unidades y recuentos."""
+    if operacion == "contar":
+        cantidad = len(filas)
+
+        if campos[0] == "pelicula" and cantidad == 1:
+            return "Se encontró 1 película."
+
+        categoria = CONTADORES[campos[0]]
+        return f"Se encontraron {cantidad} {categoria}."
+
     if not filas:
-        return "No se encontraron resultados en la base de conocimientos."
+        return (
+            "No se encontraron resultados "
+            "en la base de conocimientos."
+        )
+
     salida = []
+
     for fila in filas:
-        if len(fila) == 1:
-            salida.append(f"- {fila[0].replace('_', ' ')}")
+        partes = []
+
+        for campo, valor in zip(campos, fila):
+            texto = valor.replace("_", " ")
+
+            if campo == "duracion":
+                texto += " minutos"
+
+            partes.append((ETIQUETAS[campo], texto))
+
+        if len(partes) == 1:
+            salida.append("- " + partes[0][1])
+
         else:
             salida.append("- " + " | ".join(
-                f"{ETIQUETAS[c]}: {v.replace('_', ' ')}"
-                for c, v in zip(campos, fila)))
+                f"{etiqueta}: {texto}"
+                for etiqueta, texto in partes
+            ))
+
     if truncado:
-        salida.append("(Primeros 50 resultados; agrega filtros.)")
+        salida.append(
+            "(Primeros 50 resultados; agrega filtros.)"
+        )
+
     return "\n".join(salida)
 
 
+def guardar_historial(historial, pregunta, plan):
+    """Recuerda dos preguntas y planes, nunca respuestas de la KB."""
+    nuevo = {
+        "pregunta": pregunta,
+        "plan": plan,
+    }
+
+    return (historial + [nuevo])[-MAX_HISTORIAL:]
+
+
 def llamar_modelo(clave, pregunta, historial):
-    """Envía al modelo el esquema, la última interacción y la pregunta."""
-    texto = ("Última interacción: "
-             + json.dumps(historial[-3:], ensure_ascii=False)
-             + "\nPregunta: " + pregunta)
+    """Envía preguntas y planes anteriores, sin hechos de Prolog."""
+    texto = "Pregunta: " + pregunta
+
+    if historial:
+        contexto = json.dumps(
+            historial[-MAX_HISTORIAL:],
+            ensure_ascii=False,
+            separators=(",", ":"),
+        )
+
+        texto = (
+            "Consultas anteriores (sin respuestas): "
+            + contexto
+            + "\n"
+            + texto
+        )
+
     cuerpo = {
         "model": MODELO,
         "messages": [
@@ -250,135 +561,267 @@ def llamar_modelo(clave, pregunta, historial):
         "temperature": 0,
         "max_tokens": 250,
     }
+
     solicitud = Request(
-        URL_API, data=json.dumps(cuerpo, ensure_ascii=False).encode("utf-8"),
-        headers={"Authorization": f"Bearer {clave}",
-                 "Content-Type": "application/json"},
+        URL_API,
+        data=json.dumps(
+            cuerpo, ensure_ascii=False
+        ).encode("utf-8"),
+        headers={
+            "Authorization": f"Bearer {clave}",
+            "Content-Type": "application/json",
+        },
         method="POST",
     )
+
     inicio = time.perf_counter()
+
     for intento in range(3):
         try:
-            with urlopen(solicitud, timeout=60) as respuesta:
-                datos = json.loads(respuesta.read().decode("utf-8"))
+            with urlopen(
+                solicitud, timeout=60
+            ) as respuesta:
+                datos = json.loads(
+                    respuesta.read().decode("utf-8")
+                )
+
             break
+
         except HTTPError as exc:
-            detalle = exc.read().decode("utf-8", errors="replace")[:400]
-            if exc.code in {408, 500, 502, 503, 504} and intento < 2:
-                time.sleep(2 ** intento + random.uniform(0, 0.5))
+            detalle = exc.read().decode(
+                "utf-8", errors="replace"
+            )[:400]
+
+            if (
+                exc.code in {408, 500, 502, 503, 504}
+                and intento < 2
+            ):
+                time.sleep(
+                    2 ** intento + random.uniform(0, 0.5)
+                )
                 continue
+
             if exc.code == 429:
                 aviso = exc.headers.get("Retry-After")
-                detalle += f" (reintentar en {aviso} segundos)" if aviso else ""
-            raise RuntimeError(f"{PROVEEDOR} HTTP {exc.code}: {detalle}") from exc
+
+                if aviso:
+                    detalle += (
+                        f" (reintentar en {aviso} segundos)"
+                    )
+
+            raise RuntimeError(
+                f"{PROVEEDOR} HTTP {exc.code}: {detalle}"
+            ) from exc
+
         except (URLError, TimeoutError) as exc:
             if intento < 2:
-                time.sleep(2 ** intento + random.uniform(0, 0.5))
+                time.sleep(
+                    2 ** intento + random.uniform(0, 0.5)
+                )
                 continue
-            raise RuntimeError(f"Sin conexión con {PROVEEDOR}.") from exc
+
+            raise RuntimeError(
+                f"Sin conexión con {PROVEEDOR}."
+            ) from exc
 
     opciones = datos.get("choices") or []
+
     if not opciones:
-        raise RuntimeError(f"{PROVEEDOR} no devolvió resultados.")
-    contenido = opciones[0].get("message", {}).get("content") or ""
+        raise RuntimeError(
+            f"{PROVEEDOR} no devolvió resultados."
+        )
+
+    contenido = (
+        opciones[0].get("message", {}).get("content") or ""
+    )
+
     if isinstance(contenido, list):
-        contenido = "".join(p.get("text", "") for p in contenido
-                            if isinstance(p, dict))
-    contenido = re.sub(r"<think>.*?</think>", "", contenido, flags=re.S).strip()
-    contenido = re.sub(r"^```(?:json)?\s*|\s*```$", "", contenido).strip()
+        contenido = "".join(
+            p.get("text", "")
+            for p in contenido
+            if isinstance(p, dict)
+        )
+
+    contenido = re.sub(
+        r"<think>.*?</think>",
+        "",
+        contenido,
+        flags=re.S,
+    ).strip()
+
+    contenido = re.sub(
+        r"^```(?:json)?\s*|\s*```$",
+        "",
+        contenido,
+    ).strip()
+
     try:
         plan = json.loads(contenido)
+
     except json.JSONDecodeError as exc:
-        raise ValueError(f"{PROVEEDOR} no produjo JSON válido.") from exc
-    return plan, time.perf_counter() - inicio, datos.get("usage") or {}
+        raise ValueError(
+            f"{PROVEEDOR} no produjo JSON válido."
+        ) from exc
+
+    return (
+        plan,
+        time.perf_counter() - inicio,
+        datos.get("usage") or {},
+    )
 
 
 def main():
-    parser = argparse.ArgumentParser(description="LLM + PySwip + SWI-Prolog")
+    parser = argparse.ArgumentParser(
+        description="LLM + PySwip + SWI-Prolog"
+    )
+
     parser.add_argument("--check-kb", action="store_true")
     parser.add_argument("--debug", action="store_true")
     args = parser.parse_args()
 
     if not ARCHIVO_KB.is_file():
-        print(f"Falta {ARCHIVO_KB.name} junto al script.", file=sys.stderr)
-        return 1
-    try:
-        from pyswip import Prolog
-        prolog = Prolog()
-        prolog.consult(str(ARCHIVO_KB))
-        if not list(prolog.query("pelicula(_, _, _, _, _)", maxresult=1)):
-            raise RuntimeError("No hay hechos pelicula/5.")
-        indices = crear_indice(prolog)
-    except Exception as exc:
-        print(f"Error al cargar Prolog: {exc}", file=sys.stderr)
+        print(
+            f"Falta {ARCHIVO_KB.name} junto al script.",
+            file=sys.stderr,
+        )
         return 1
 
-    print(f"KB cargada mediante SWI-Prolog: {ARCHIVO_KB.name}.")
+    try:
+        from pyswip import Prolog
+
+        prolog = Prolog()
+        prolog.consult(str(ARCHIVO_KB))
+
+        if not list(prolog.query(
+            "pelicula(_, _, _, _, _)",
+            maxresult=1,
+        )):
+            raise RuntimeError("No hay hechos pelicula/5.")
+
+        indices = crear_indice(prolog)
+
+    except Exception as exc:
+        print(
+            f"Error al cargar Prolog: {exc}",
+            file=sys.stderr,
+        )
+        return 1
+
+    print(
+        f"KB cargada mediante SWI-Prolog: {ARCHIVO_KB.name}."
+    )
+
     if args.check_kb:
-        cantidad = sum(len(v) for v in indices["pelicula"].values())
+        cantidad = sum(
+            len(v) for v in indices["pelicula"].values()
+        )
+
         print(f"Películas indexadas: {cantidad}.")
-        print("Consulta Prolog correcta; no se utilizó el LLM.")
+        print(
+            "Consulta Prolog correcta; no se utilizó el LLM."
+        )
         return 0
 
     clave = os.getenv(VARIABLE_CLAVE, "").strip()
+
     if not clave:
         try:
-            clave = getpass.getpass(f"Introduce {VARIABLE_CLAVE}: ").strip()
+            clave = getpass.getpass(
+                f"Introduce {VARIABLE_CLAVE}: "
+            ).strip()
+
         except (EOFError, KeyboardInterrupt):
             print("\nCancelado.")
             return 1
+
     if not clave:
-        print("No se introdujo una API Key.", file=sys.stderr)
+        print(
+            "No se introdujo una API Key.",
+            file=sys.stderr,
+        )
         return 1
 
     print(f"Proveedor: {PROVEEDOR} | Modelo: {MODELO}")
     print("Escribe 'salir' para terminar.\n")
+
     historial = []
+
     while True:
-            try:
-                pregunta = input("Tú > ").strip()
-            except (EOFError, KeyboardInterrupt):
-                print("\nHasta luego.")
-                break
-            if pregunta.lower() in {"salir", "exit", "quit"}:
-                print("Hasta luego.")
-                break
-            if not pregunta:
-                continue
-            try:
-                generado, tiempo_llm, uso = llamar_modelo(clave, pregunta, historial)
-                plan = validar_plan(generado, indices)
+        try:
+            pregunta = input("Tú > ").strip()
+
+        except (EOFError, KeyboardInterrupt):
+            print("\nHasta luego.")
+            break
+
+        if pregunta.lower() in {"salir", "exit", "quit"}:
+            print("Hasta luego.")
+            break
+
+        if not pregunta:
+            continue
+
+        try:
+            generado, tiempo_llm, uso = llamar_modelo(
+                clave, pregunta, historial
+            )
+
+            plan = validar_plan(generado, indices)
+
+            if args.debug:
+                print(
+                    "Traducción:",
+                    json.dumps(plan, ensure_ascii=False)
+                )
+
+            if plan["accion"] == "consulta":
+                filas, truncado, tiempo_kb, consulta = (
+                    consultar_prolog(prolog, plan)
+                )
+
                 if args.debug:
-                    print("Traducción:", json.dumps(plan, ensure_ascii=False))
+                    print("Prolog:", consulta)
 
-                if plan["accion"] == "consulta":
-                    filas, truncado, tiempo_kb, consulta = consultar_prolog(prolog, plan)
-                    if args.debug:
-                        print("Prolog:", consulta)
-                    respuesta_bot = presentar(filas, plan["campos"], truncado)
-                    print("\nChatbot > " + respuesta_bot)
-                    print(f"Tiempo LLM: {tiempo_llm:.2f}s | Prolog: {tiempo_kb:.4f}s")
-                    # Guardamos máximo 10 filas en memoria para no disparar los tokens
-                    respuesta_historial = presentar(filas[:10], plan["campos"], len(filas) > 10)
-                else:
-                    respuesta_bot = plan.get("mensaje", "No entendí la pregunta.")
-                    print("\nChatbot > " + respuesta_bot)
-                    print(f"Tiempo LLM: {tiempo_llm:.2f}s")
-                    respuesta_historial = respuesta_bot
+                respuesta_bot = presentar(
+                    filas,
+                    plan["campos"],
+                    truncado,
+                    plan["operacion"],
+                )
 
-                if uso:
-                    print(f"Tokens: {uso.get('prompt_tokens', '?')} entrada, "
-                        f"{uso.get('completion_tokens', '?')} salida")
-                print()
+                print("\nChatbot > " + respuesta_bot)
+                print(
+                    f"Tiempo LLM: {tiempo_llm:.2f}s | "
+                    f"Prolog: {tiempo_kb:.4f}s"
+                )
 
-                # Sobrescribe historial para conservar únicamente la última interacción
-                historial = [{
-                    "pregunta": pregunta,
-                    "plan": plan,
-                    "respuesta": respuesta_historial,
-                }]
-            except (RuntimeError, ValueError, TypeError, KeyError) as exc:
-                print(f"\nError: {exc}\n")
+            else:
+                respuesta_bot = plan.get(
+                    "mensaje", "No entendí la pregunta."
+                )
+
+                print("\nChatbot > " + respuesta_bot)
+                print(
+                    f"Tiempo LLM: {tiempo_llm:.2f}s"
+                )
+
+            if uso:
+                print(
+                    f"Tokens: {uso.get('prompt_tokens', '?')} entrada, "
+                    f"{uso.get('completion_tokens', '?')} salida"
+                )
+
+            print()
+
+            historial = guardar_historial(
+                historial, pregunta, plan
+            )
+
+        except (
+            RuntimeError, ValueError, TypeError, KeyError
+        ) as exc:
+            print(f"\nError: {exc}\n")
+
     return 0
 
 

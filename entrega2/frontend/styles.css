@@ -44,3 +44,7 @@ button {
     color: #555555;
     font-size: 13px;
 }
+
+[hidden] {
+    display: none !important;
+}
